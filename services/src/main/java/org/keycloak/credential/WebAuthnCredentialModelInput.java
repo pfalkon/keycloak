@@ -17,12 +17,13 @@
 package org.keycloak.credential;
 
 import org.keycloak.common.util.Base64;
+import org.keycloak.models.credential.WebAuthnCredentialModel;
 
-import com.webauthn4j.data.WebAuthnAuthenticationContext;
+import com.webauthn4j.data.WebAuthnAuthenticationParameters;
+import com.webauthn4j.data.WebAuthnAuthenticationRequest;
 import com.webauthn4j.data.attestation.authenticator.AttestedCredentialData;
 import com.webauthn4j.data.attestation.authenticator.COSEKey;
 import com.webauthn4j.data.attestation.statement.AttestationStatement;
-import org.keycloak.models.credential.WebAuthnCredentialModel;
 
 public class WebAuthnCredentialModelInput implements CredentialInput {
 
@@ -30,7 +31,9 @@ public class WebAuthnCredentialModelInput implements CredentialInput {
 
     private AttestedCredentialData attestedCredentialData;
     private AttestationStatement attestationStatement;
-    private WebAuthnAuthenticationContext authenticationContext;
+    private WebAuthnAuthenticationParameters webAuthnAuthenticationParameters;
+    private WebAuthnAuthenticationRequest webAuthnAuthenticationRequest;
+
     private long count;
     private String credentialDBId;
 
@@ -65,12 +68,20 @@ public class WebAuthnCredentialModelInput implements CredentialInput {
         return count;
     }
 
-    public WebAuthnAuthenticationContext getAuthenticationContext() {
-        return authenticationContext;
+    public WebAuthnAuthenticationParameters getWebAuthnAuthenticationParameters() {
+        return webAuthnAuthenticationParameters;
     }
 
-    public void setAuthenticationContext(WebAuthnAuthenticationContext authenticationContext) {
-        this.authenticationContext = authenticationContext;
+    public void setWebAuthnAuthenticationParameters(WebAuthnAuthenticationParameters webAuthnAuthenticationParameter) {
+        this.webAuthnAuthenticationParameters = webAuthnAuthenticationParameter;
+    }
+
+    public WebAuthnAuthenticationRequest getWebAuthnAuthenticationRequest() {
+        return webAuthnAuthenticationRequest;
+    }
+
+    public void setWebAuthnAuthenticationRequest(WebAuthnAuthenticationRequest webAuthnAuthenticationRequest) {
+        this.webAuthnAuthenticationRequest = webAuthnAuthenticationRequest;
     }
 
     public void setAttestedCredentialData(AttestedCredentialData attestedCredentialData) {
@@ -123,10 +134,10 @@ public class WebAuthnCredentialModelInput implements CredentialInput {
               .append(credPubKey.getKeyType().name())
               .append(",");
         }
-        if (authenticationContext != null) {
+        if (webAuthnAuthenticationRequest != null) {
             // only set on Authentication
             sb.append("Credential Id = ")
-              .append(Base64.encodeBytes(authenticationContext.getCredentialId()))
+              .append(Base64.encodeBytes(webAuthnAuthenticationRequest.getCredentialId()))
               .append(",");
         }
         if (sb.length() > 0)

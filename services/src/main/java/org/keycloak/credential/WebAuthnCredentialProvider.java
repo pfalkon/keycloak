@@ -22,23 +22,25 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import org.jboss.logging.Logger;
+
 import org.keycloak.common.util.Base64;
 import org.keycloak.common.util.Time;
+import org.keycloak.models.credential.WebAuthnCredentialModel;
+import org.keycloak.models.credential.dto.WebAuthnCredentialData;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.UserModel;
 
+import com.webauthn4j.WebAuthnManager;
 import com.webauthn4j.authenticator.Authenticator;
 import com.webauthn4j.authenticator.AuthenticatorImpl;
 import com.webauthn4j.converter.util.CborConverter;
+import com.webauthn4j.data.WebAuthnAuthenticationData;
+import com.webauthn4j.data.WebAuthnAuthenticationParameters;
 import com.webauthn4j.data.attestation.authenticator.AAGUID;
 import com.webauthn4j.data.attestation.authenticator.AttestedCredentialData;
 import com.webauthn4j.data.attestation.authenticator.COSEKey;
 import com.webauthn4j.util.exception.WebAuthnException;
-import com.webauthn4j.validator.WebAuthnAuthenticationContextValidationResponse;
-import com.webauthn4j.validator.WebAuthnAuthenticationContextValidator;
-import org.keycloak.models.credential.WebAuthnCredentialModel;
-import org.keycloak.models.credential.dto.WebAuthnCredentialData;
 
 public class WebAuthnCredentialProvider implements CredentialProvider<WebAuthnCredentialModel>, CredentialInputValidator {
 
@@ -159,26 +161,30 @@ public class WebAuthnCredentialProvider implements CredentialProvider<WebAuthnCr
         WebAuthnCredentialModelInput context = WebAuthnCredentialModelInput.class.cast(input);
         List<WebAuthnCredentialModelInput> auths = getWebAuthnCredentialModelList(realm, user);
 
-        WebAuthnAuthenticationContextValidator webAuthnAuthenticationContextValidator =
-                new WebAuthnAuthenticationContextValidator();
+        WebAuthnManager webAuthnManager = WebAuthnManager.createNonStrictWebAuthnManager(); // no special setting is needed for authentication's validation
+        WebAuthnAuthenticationData webAuthnAuthenticationData = null;
         try {
             for (WebAuthnCredentialModelInput auth : auths) {
 
                 byte[] credentialId = auth.getAttestedCredentialData().getCredentialId();
-                if (Arrays.equals(credentialId, context.getAuthenticationContext().getCredentialId())) {
+                if (Arrays.equals(credentialId, context.getWebAuthnAuthenticationRequest().getCredentialId())) {
                     Authenticator authenticator = new AuthenticatorImpl(
                             auth.getAttestedCredentialData(),
                             auth.getAttestationStatement(),
                             auth.getCount()
                     );
 
-                    // WebAuthnException is thrown if validation fails
-                    WebAuthnAuthenticationContextValidationResponse response =
-                            webAuthnAuthenticationContextValidator.validate(
-                                    context.getAuthenticationContext(),
-                                    authenticator);
+                    // parse
+                    webAuthnAuthenticationData = webAuthnManager.parseAuthenticationRequest(context.getWebAuthnAuthenticationRequest());
+                    // validate
+                    WebAuthnAuthenticationParameters webAuthnAuthenticationParameters = new WebAuthnAuthenticationParameters(
+                            context.getWebAuthnAuthenticationParameters().getServerProperty(),
+                            authenticator,
+                            context.getWebAuthnAuthenticationParameters().isUserVerificationRequired()
+                    );
+                    webAuthnAuthenticationData.validate(webAuthnAuthenticationParameters);
 
-                    logger.debugv("response.getAuthenticatorData().getFlags() = {0}", response.getAuthenticatorData().getFlags());
+                    logger.debugv("response.getAuthenticatorData().getFlags() = {0}", webAuthnAuthenticationData.getAuthenticatorData().getFlags());
 
                     // update authenticator counter
                     long count = auth.getCount();
@@ -201,12 +207,10 @@ public class WebAuthnCredentialProvider implements CredentialProvider<WebAuthnCr
         return false;
     }
 
-
     @Override
     public String getType() {
         return WebAuthnCredentialModel.TYPE;
     }
-
 
     private List<WebAuthnCredentialModelInput> getWebAuthnCredentialModelList(RealmModel realm, UserModel user) {
         List<CredentialModel> credentialModels = session.userCredentialManager().getStoredCredentialsByType(realm, user, WebAuthnCredentialModel.TYPE);

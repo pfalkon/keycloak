@@ -16,14 +16,14 @@
 
 package org.keycloak.authentication.authenticators.browser;
 
-import com.webauthn4j.data.WebAuthnAuthenticationContext;
-import com.webauthn4j.data.client.Origin;
-import com.webauthn4j.data.client.challenge.Challenge;
-import com.webauthn4j.data.client.challenge.DefaultChallenge;
-import com.webauthn4j.server.ServerProperty;
-import com.webauthn4j.util.exception.WebAuthnException;
+import java.util.Collections;
+import java.util.List;
+
+import javax.ws.rs.core.MultivaluedMap;
+import javax.ws.rs.core.Response;
 
 import org.jboss.logging.Logger;
+
 import org.keycloak.WebAuthnConstants;
 import org.keycloak.authentication.AuthenticationFlowContext;
 import org.keycloak.authentication.AuthenticationFlowError;
@@ -42,10 +42,13 @@ import org.keycloak.models.RealmModel;
 import org.keycloak.models.UserModel;
 import org.keycloak.models.credential.WebAuthnCredentialModel;
 
-import javax.ws.rs.core.MultivaluedMap;
-import javax.ws.rs.core.Response;
-import java.util.Collections;
-import java.util.List;
+import com.webauthn4j.data.WebAuthnAuthenticationParameters;
+import com.webauthn4j.data.WebAuthnAuthenticationRequest;
+import com.webauthn4j.data.client.Origin;
+import com.webauthn4j.data.client.challenge.Challenge;
+import com.webauthn4j.data.client.challenge.DefaultChallenge;
+import com.webauthn4j.server.ServerProperty;
+import com.webauthn4j.util.exception.WebAuthnException;
 
 public class WebAuthnAuthenticator implements Authenticator {
 
@@ -104,10 +107,10 @@ public class WebAuthnAuthenticator implements Authenticator {
 
         String baseUrl = UriUtils.getOrigin(context.getUriInfo().getBaseUri());
         String rpId = context.getUriInfo().getBaseUri().getHost();
-
         Origin origin = new Origin(baseUrl);
         Challenge challenge = new DefaultChallenge(context.getAuthenticationSession().getAuthNote(WebAuthnConstants.AUTH_CHALLENGE_NOTE));
-        ServerProperty server = new ServerProperty(origin, rpId, challenge, null);
+        ServerProperty serverProperty = new ServerProperty(origin, rpId, challenge, null);
+        boolean userVerificationRequired = WebAuthnConstants.OPTION_REQUIRED.equals(context.getRealm().getWebAuthnPolicy().getUserVerificationRequirement()) ? true : false;
 
         byte[] credentialId = Base64Url.decode(params.getFirst(WebAuthnConstants.CREDENTIAL_ID));
         byte[] clientDataJSON = Base64Url.decode(params.getFirst(WebAuthnConstants.CLIENT_DATA_JSON));
@@ -115,10 +118,6 @@ public class WebAuthnAuthenticator implements Authenticator {
         byte[] signature = Base64Url.decode(params.getFirst(WebAuthnConstants.SIGNATURE));
 
         String userId = params.getFirst(WebAuthnConstants.USER_HANDLE);
-        boolean isUVFlagChecked = false;
-        String userVerificationRequirement = context.getRealm().getWebAuthnPolicy().getUserVerificationRequirement();
-        if (WebAuthnConstants.OPTION_REQUIRED.equals(userVerificationRequirement)) isUVFlagChecked = true;
-
         // existing User Handle means that the authenticator used Resident Key supported public key credential
         if (userId == null || userId.isEmpty()) {
             // Resident Key not supported public key credential was used
@@ -144,17 +143,25 @@ public class WebAuthnAuthenticator implements Authenticator {
             }
         }
         UserModel user = session.users().getUserById(userId, context.getRealm());
-        WebAuthnAuthenticationContext authenticationContext = new WebAuthnAuthenticationContext(
+
+        WebAuthnAuthenticationRequest webAuthnAuthenticationRequest = new WebAuthnAuthenticationRequest(
                 credentialId,
-                clientDataJSON,
                 authenticatorData,
-                signature,
-                server,
-                isUVFlagChecked
+                clientDataJSON,
+                signature
         );
 
+        WebAuthnAuthenticationParameters webAuthnAuthenticationParameters =
+                new WebAuthnAuthenticationParameters(
+                        serverProperty,
+                        null, // here authenticator can not be fetched. set it afterwards in WebAuthnCredentialProvider.isValid()
+                        userVerificationRequired
+                );
+
         WebAuthnCredentialModelInput cred = new WebAuthnCredentialModelInput();
-        cred.setAuthenticationContext(authenticationContext);
+
+        cred.setWebAuthnAuthenticationRequest(webAuthnAuthenticationRequest);
+        cred.setWebAuthnAuthenticationParameters(webAuthnAuthenticationParameters);
 
         boolean result = false;
         try {
@@ -165,7 +172,7 @@ public class WebAuthnAuthenticator implements Authenticator {
         }
         String encodedCredentialID = Base64Url.encode(credentialId);
         if (result) {
-            String isUVChecked = Boolean.toString(isUVFlagChecked);
+            String isUVChecked = Boolean.toString(userVerificationRequired);
             logger.infov("WebAuthn Authentication successed. isUserVerificationChecked = {0}, PublicKeyCredentialID = {1}", isUVChecked, encodedCredentialID);
             context.setUser(user);
             context.getEvent()
