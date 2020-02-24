@@ -16,15 +16,14 @@
 
 package org.keycloak.credential;
 
+import com.webauthn4j.converter.util.ObjectConverter;
 import org.keycloak.models.KeycloakSession;
-
-import com.webauthn4j.converter.util.CborConverter;
 
 public class WebAuthnCredentialProviderFactory implements CredentialProviderFactory<WebAuthnCredentialProvider> {
 
     public static final String PROVIDER_ID = "keycloak-webauthn";
 
-    private static CborConverter converter = new CborConverter();
+    private static ObjectConverter converter = new ObjectConverter();
 
     @Override
     public CredentialProvider create(KeycloakSession session) {

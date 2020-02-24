@@ -21,6 +21,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import com.webauthn4j.converter.util.ObjectConverter;
 import org.jboss.logging.Logger;
 import org.keycloak.authentication.requiredactions.WebAuthnRegisterFactory;
 import org.keycloak.common.util.Base64;
@@ -32,7 +33,6 @@ import org.keycloak.models.UserModel;
 import com.webauthn4j.WebAuthnManager;
 import com.webauthn4j.authenticator.Authenticator;
 import com.webauthn4j.authenticator.AuthenticatorImpl;
-import com.webauthn4j.converter.util.CborConverter;
 import com.webauthn4j.data.AuthenticationData;
 import com.webauthn4j.data.AuthenticationParameters;
 import com.webauthn4j.data.attestation.authenticator.AAGUID;
@@ -54,12 +54,12 @@ public class WebAuthnCredentialProvider implements CredentialProvider<WebAuthnCr
     private CredentialPublicKeyConverter credentialPublicKeyConverter;
     private AttestationStatementConverter attestationStatementConverter;
 
-    public WebAuthnCredentialProvider(KeycloakSession session, CborConverter converter) {
+    public WebAuthnCredentialProvider(KeycloakSession session, ObjectConverter objectConverter) {
         this.session = session;
         if (credentialPublicKeyConverter == null)
-            credentialPublicKeyConverter = new CredentialPublicKeyConverter(converter);
+            credentialPublicKeyConverter = new CredentialPublicKeyConverter(objectConverter);
         if (attestationStatementConverter == null)
-            attestationStatementConverter = new AttestationStatementConverter(converter);
+            attestationStatementConverter = new AttestationStatementConverter(objectConverter);
     }
 
     private UserCredentialStore getCredentialStore() {
